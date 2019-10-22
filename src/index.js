@@ -12,11 +12,11 @@ class App {
     this.startTimer = this.startTimer.bind(this);
     this.updateTimer = this.updateTimer.bind(this);
     this.stopTimer = this.stopTimer.bind(this);
+    this.pausedTimer = this.pausedTimer.bind(this);
     this.displayTime = this.displayTime.bind(this);
     this.saveIntervalData = this.saveIntervalData.bind(this);
     this.displayCyclesToday = this.displayCyclesToday.bind(this);
     this.displayHistory = this.displayHistory.bind(this);
-
     this.resetValues();
     this.getElements();
     this.toggleEvents();
@@ -54,20 +54,25 @@ class App {
     this.historyDisplay = document.getElementById('history');
     this.startButton = document.getElementById('start-button');
     this.stopButton = document.getElementById('stop-button');
+    this.pauseButton = document.getElementById('pause-button');
   }
 
   resetValues() {
     this.workLength = 25;
     this.breakLength = 5;
-    this.startAt = null;
-    this.endAt = null;
+    this.longBreakLength = 15;
+    this.startAt = null; // カウントダウン開始の時間
+    this.endAt = null; // 
+    this.pausedAt = null; // 一時停止の開始時と再開時の差分をendAtに追加するための変数
     this.isTimerStopped = true;
-    this.onWork = true;
+    this.onWork = true; // 作業中を表す
+    this.tempCycles = 0; // 作業完了回数のカウント
   }
 
   toggleEvents() {
     this.startButton.addEventListener('click', this.startTimer);
     this.stopButton.addEventListener('click', this.stopTimer);
+    this.pauseButton.addEventListener('click', this.pausedTimer);
   }
 
   saveIntervalData(momentItem) {
@@ -81,10 +86,18 @@ class App {
     if (e) e.preventDefault();
     this.startButton.disabled = true;
     this.stopButton.disabled = false;
-    this.isTimerStopped = false;
-    this.startAt = time;
-    const startAtClone = moment(this.startAt);
-    this.endAt = startAtClone.add(this.workLength, 'minutes');
+    this.pauseButton.disabled = false;
+    // 一時停止の開始時と再開時の差分をendAtに追加するための変数
+    if (this.pausedAt) {
+      // const diffrence を用意して差分をdiffメソッドを使って算出した値を定数に代入する
+      const difference = moment(time).diff(this.pausedAt);
+      this.endAt.add(difference, 'millisecond');
+    } else {
+      this.isTimerStopped = false;
+      this.startAt = time;
+      const startAtClone = moment(this.startAt);
+      this.endAt = startAtClone.add(this.workLength, 'minutes');
+    }
     this.timerUpdater = window.setInterval(this.updateTimer, 500);
     // タイムラグがあるので、0.5秒ごとにアップデートします。
     this.displayTime();
@@ -98,12 +111,31 @@ class App {
         this.displayCyclesToday();
         this.displayHistory();
       }
-      this.onWork = !this.onWork;
+      this.onWork = !this.onWork; // 作業が停止している状態
       this.startAt = time;
-      this.endAt = this.onWork ? moment(time).add(this.workLength, 'minutes')
-        : moment(time).add(this.breakLength, 'minutes');
+      if (this.onWork) endAt = moment(time).add(this.workLength, 'minutes');
+      if (!this.onWork){
+        if (this.tempCycles === 3) { // 配列なので4回目は3になる
+          endAt = moment(time).add(this.longBreakLength, 'minutes');
+          this.tempCycles = 0;
+        } else {
+          endAt = moment(time).add(this.breakLength, 'minutes');
+          this.tempCycles += 1;
+        }
+      }
     }
     this.displayTime(time);
+  }
+
+  pausedTimer(e = null, time = moment()) {
+    if (e) e.preventDefault();
+    this.pausedAt = time;
+    this.startButton.disabled = false;
+    this.stopButton.disabled = true;
+    this.pauseButton.disabled = true;
+    window.clearInterval(this.timerUpdater);
+    this.timerUpdater = null;
+    this.displayTime();
   }
 
   stopTimer(e = null) {
@@ -111,6 +143,7 @@ class App {
     this.resetValues();
     this.startButton.disabled = false;
     this.stopButton.disabled = true;
+    this.pauseButton.disabled = true;
     window.clearInterval(this.timerUpdater);
     this.timerUpdater = null;
     this.displayTime();
